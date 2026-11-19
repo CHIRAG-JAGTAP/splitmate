@@ -1,0 +1,27 @@
+services:
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports: ["27017:27017"]
+    volumes: ["mongo-data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try{rs.status().ok}catch(e){rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok}"]
+      interval: 5s
+      retries: 20
+  server:
+    build: { context: ., dockerfile: server/Dockerfile }
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongo:27017/splitmate?replicaSet=rs0
+      CLIENT_ORIGIN: http://localhost:8080
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      COOKIE_SECURE: "false"
+    depends_on: { mongo: { condition: service_healthy } }
+    volumes: ["uploads:/app/uploads"]
+    ports: ["4000:4000"]
+  client:
+    build: { context: ., dockerfile: client/Dockerfile }
+    depends_on: [server]
+    ports: ["8080:80"]
+volumes: { mongo-data: {}, uploads: {} }
